@@ -7,6 +7,9 @@
 # Configuration:
 #   HUBOT_DISCORD_TOKEN          - authentication token for bot
 #   HUBOT_DISCORD_STATUS_MSG     - Status message to set for "currently playing game"
+#   HUBOT_DISCORD_ACTIVITY_TYPE  - Set the type of activity the bot is performing ("PLAYING", "STREAMING", "LISTENING", "WATCHING")
+#   HUBOT_DISCORD_ACTIVITY_NAME  - The name of the activity the bot is currently doing ("DOOM 2016 OST", "Stardew Valley")
+#   HUBOT_DISCORD_ACTIVITY_URL   - The URL of the activity that the bot is performing ("https://twitch.tv/twitch")
 #
 # Notes:
 #
@@ -22,6 +25,7 @@ ReactionMessage     = require "./reaction_message"
 
 #Settings
 currentlyPlaying    = process.env.HUBOT_DISCORD_STATUS_MSG || ''
+activitySet         = process.env.HUBOT_DISCORD_ACTIVITY_TYPE && process.env.HUBOT_DISCORD_ACTIVITY_NAME
 
 Robot::react = (matcher, options, callback) ->
   # this function taken from the hubot-slack api
@@ -87,6 +91,19 @@ class DiscordBot extends Adapter
         permissions = isText && channel.permissionsFor(user)
         return if isText then (permissions != null && permissions.hasPermission("SEND_MESSAGES")) else channel.type != 'text'
 
+      _set_client_activity: (activityName, activityType, activityUrl) =>
+        if activityType and activityName
+          activityOpts = {
+            type: activityType
+          }
+
+          if activityUrl
+            activityOpts.url = activityUrl
+          
+          @client.user.setActivity(activityName, activityOpts)
+            .then(@robot.logger.debug("Activity set to #{activityType} for #{activityName} with optional URL: #{activityUrl}"))
+            .catch(@robot.logger.error)
+      
      ready: =>
         @robot.logger.info "Logged in: #{@client.user.username}##{@client.user.discriminator}"
         @robot.name = @client.user.username
@@ -95,9 +112,17 @@ class DiscordBot extends Adapter
 
         #post-connect actions
         @rooms[channel.id] = channel for channel in @client.channels
-        @client.user.setActivity(currentlyPlaying)
-          .then(@robot.logger.debug("Status set to #{currentlyPlaying}"))
-          .catch(@robot.logger.error)
+
+        if activitySet
+          activityName = process.env.HUBOT_DISCORD_ACTIVITY_NAME
+          activityType = process.env.HUBOT_DISCORD_ACTIVITY_TYPE
+          activityUrl  = process.env.HUBOT_DISCORD_ACTIVITY_URL
+
+          @._set_client_activity(activityName, activityType, activityUrl)
+        else
+          @client.user.setActivity(currentlyPlaying)
+            .then(@robot.logger.debug("Status set to #{currentlyPlaying}"))
+            .catch(@robot.logger.error)
 
      message: (message) =>
         # ignore messages from myself
